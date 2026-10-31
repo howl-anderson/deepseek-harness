@@ -86,6 +86,8 @@ kind: "package-reference"
 
 当前模型接受图片输入且 harness 启用了附件功能时支持图片；图片会像其他图片一样出现在对话中。不支持图片时——以及服务器返回音频或嵌入资源时——模型会看到清晰的诊断消息，而不是什么都没有。
 
+模型在一条消息里发出多个工具调用时，服务器声明了 `annotations.readOnlyHint: true` 的 MCP 工具会彼此并发、也与 harness 自身的并发安全工具并发执行，上限由 agent loop 的 `maxParallelToolCalls` 决定；其他 MCP 工具仍逐个执行。该注解被视为服务器对"此工具无副作用"的声明而被信任。
+
 ### 启动、工具更新与重连
 
 服务器的工具会在 harness 开始首个轮次之前出现。服务器更改工具列表时，模型的工具集会自动更新；更新失败时，上一组工具继续可用。
@@ -130,7 +132,7 @@ SDK 通过旧版通知或现代协议订阅接收工具列表变化。监督器�
 
 ### 工具执行内部细节
 
-工具调用向 SDK 提供原始名称、完整工具定义、JSON 参数、取消信号及配置的超时。SDK 负责协议校验、已声明输出 schema 的校验和现代协议请求 header。成功结果规范值为 `{ content: JsonValue[], structuredContent? }`，为编程调用方及 PTC 模式保留有效的 MCP JSON 块。MCP `isError` 结果会在图片持久化前抛出。桥接器在保存前校验整批图片；拒绝时将每张图片投影为诊断文本。对未声明 `resources` 能力的服务器，资源列表与模板列表直接返回空页而不调用 SDK，因为 SDK 的兜底逻辑会把诊断写到 stdout，而 ACP 配置档在 stdout 上传输 JSON-RPC。
+工具调用向 SDK 提供原始名称、完整工具定义、JSON 参数、取消信号及配置的超时。SDK 负责协议校验、已声明输出 schema 的校验和现代协议请求 header。成功结果规范值为 `{ content: JsonValue[], structuredContent? }`，为编程调用方及 PTC 模式保留有效的 MCP JSON 块。MCP `isError` 结果会在图片持久化前抛出。桥接器在保存前校验整批图片；拒绝时将每张图片投影为诊断文本。列表中带 `annotations.readOnlyHint: true` 的工具注册时附带返回 `true` 的 `isConcurrencySafe`，ToolRuntime 调度器因此把它的调用放入并行组；执行器不跨调用保留任何按工具的状态，图片持久化走内容寻址的附件存储。对未声明 `resources` 能力的服务器，资源列表与模板列表直接返回空页而不调用 SDK，因为 SDK 的兜底逻辑会把诊断写到 stdout，而 ACP 配置档在 stdout 上传输 JSON-RPC。
 
 ### 环境清洗（stdio）
 

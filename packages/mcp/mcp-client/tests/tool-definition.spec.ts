@@ -68,3 +68,19 @@ describe('MCP result callback adaptation', () => {
     },
   )
 })
+
+describe('MCP annotations', () => {
+  it('maps readOnlyHint to the ToolRuntime parallel group and leaves other tools exclusive', () => {
+    const ctx = new Context()
+    const base = {
+      rawName: 'window', description: 'Read the selected window.',
+      inputSchema: { type: 'object' }, call: async () => ({ content: [] }),
+    }
+    const readOnly = createMcpToolDefinition(ctx, { ...base, name: 'read_only', readOnly: true })
+    const mutating = createMcpToolDefinition(ctx, { ...base, name: 'mutating', readOnly: false })
+    const unannotated = createMcpToolDefinition(ctx, { ...base, name: 'unannotated' })
+    expect(readOnly.isConcurrencySafe?.({})).toBe(true)
+    expect(mutating.isConcurrencySafe).toBeUndefined()
+    expect(unannotated.isConcurrencySafe).toBeUndefined()
+  })
+})

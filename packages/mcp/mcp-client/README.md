@@ -86,6 +86,8 @@ When the model calls an MCP tool, the call runs against the remote server with a
 
 Images are supported when the current model accepts image input and the harness attachment feature is enabled; they then appear in the conversation like other images. Otherwise — and for audio or embedded resources — the model sees a clear diagnostic message instead of nothing.
 
+When the model issues several tool calls in one message, MCP tools whose server declares `annotations.readOnlyHint: true` run concurrently with each other and with the harness's own concurrency-safe tools, bounded by the agent loop's `maxParallelToolCalls`; every other MCP tool runs one at a time. The server's annotation is trusted as its statement that the tool has no side effects.
+
 ### Startup, updates, and reconnection
 
 The server's tools appear before the harness starts its first turn. When the server changes its tool list, the model's tool set updates automatically; if the update fails, the previous tool set keeps working.
@@ -130,7 +132,7 @@ The SDK receives tool-list changes through legacy notifications or a modern subs
 
 ### Tool execution internals
 
-A tool call uses the SDK with the raw name, complete tool definition, JSON arguments, abort signal, and configured timeout. The SDK owns protocol validation, advertised output-schema validation, and modern request headers. Canonical success is `{ content: JsonValue[], structuredContent? }`, preserving valid MCP JSON blocks for programmatic and PTC mode callers. An MCP `isError` result throws before image persistence. The bridge validates each image batch before saving it; a refusal projects every image as diagnostic text. For a server that does not advertise `resources`, resource and template lists return empty pages without calling the SDK, whose fallback writes a diagnostic to stdout, where the ACP profile carries JSON-RPC.
+A tool call uses the SDK with the raw name, complete tool definition, JSON arguments, abort signal, and configured timeout. The SDK owns protocol validation, advertised output-schema validation, and modern request headers. Canonical success is `{ content: JsonValue[], structuredContent? }`, preserving valid MCP JSON blocks for programmatic and PTC mode callers. An MCP `isError` result throws before image persistence. The bridge validates each image batch before saving it; a refusal projects every image as diagnostic text. A tool listed with `annotations.readOnlyHint: true` is registered with `isConcurrencySafe` returning `true`, so the ToolRuntime scheduler places its calls in the parallel group; the executor keeps no per-tool state across calls, and image persistence goes through the content-addressed attachment store. For a server that does not advertise `resources`, resource and template lists return empty pages without calling the SDK, whose fallback writes a diagnostic to stdout, where the ACP profile carries JSON-RPC.
 
 ### Environment scrubbing (stdio)
 

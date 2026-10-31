@@ -135,6 +135,7 @@ export async function syncTools(
       inputSchema: tool.inputSchema,
       outputSchema: tool.outputSchema,
       taskRequired: tool.execution?.taskSupport === 'required',
+      readOnly: tool.annotations?.readOnlyHint === true,
       call: (args, execution) => client.callTool(
         { name: tool.name, arguments: args },
         { signal: execution.signal, timeout: opts.toolCallTimeoutMs, toolDefinition: tool },
@@ -207,6 +208,14 @@ export interface McpToolDefinitionOptions {
   /** Whether the upstream tool requires the unsupported task execution extension. */
   taskRequired?: boolean
   /**
+   * Whether the upstream tool declared `annotations.readOnlyHint: true`. A read-only
+   * tool joins the ToolRuntime parallel group (`isConcurrencySafe`): its execution
+   * touches no parent-owned state because every result is validated per call and
+   * images are saved through the content-addressed attachment store. The hint is
+   * server-asserted and never model-visible.
+   */
+  readOnly?: boolean
+  /**
    * Obtain one raw MCP result from the provider.
    * @param args - model arguments admitted by the ToolRuntime.
    * @param execution - exact ToolRuntime invocation, including its Agent and cancellation.
@@ -226,7 +235,7 @@ export function createMcpToolDefinition(
   ctx: Context,
   options: McpToolDefinitionOptions,
 ): ToolDefinition {
-  const { name, rawName, description, inputSchema } = options
+  const { name, rawName, description, inputSchema, readOnly } = options
   const projections = new WeakMap<ToolExecution, PreparedProjection>()
   return {
     name,
@@ -234,6 +243,7 @@ export function createMcpToolDefinition(
     parameters: inputSchema,
     output: createOutput(rawName, supportedOutputSchema(options.outputSchema)),
     execute: createExecutor(ctx, options, projections),
+    ...readOnly === true ? { isConcurrencySafe: () => true } : {},
     projectContent(exec: Readonly<ToolExecution>, result: Readonly<ToolExecutionResult>) {
       const projection = projections.get(exec)
       if (projection === undefined) return undefined

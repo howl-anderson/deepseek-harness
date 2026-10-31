@@ -26,6 +26,7 @@ interface MockTool {
   inputSchema: Record<string, unknown>
   outputSchema?: Record<string, unknown>
   execution?: { taskSupport?: 'optional' | 'required' | 'forbidden' }
+  annotations?: { readOnlyHint?: boolean; idempotentHint?: boolean }
 }
 
 interface MockCallResult {
@@ -195,6 +196,20 @@ describe('syncTools', () => {
     // Raw names are NOT registered.
     expect(ctx.tools.get('greet')).toBeUndefined()
     expect(ctx.tools.get('add')).toBeUndefined()
+  })
+
+  it('registers readOnlyHint tools as concurrency-safe and every other tool as exclusive', async () => {
+    const client = createMockClient([
+      { name: 'lookup', inputSchema: { type: 'object' }, annotations: { readOnlyHint: true, idempotentHint: true } },
+      { name: 'idempotent_write', inputSchema: { type: 'object' }, annotations: { idempotentHint: true } },
+      { name: 'write', inputSchema: { type: 'object' } },
+    ])
+
+    await syncTools(client as never, ctx, defaultOpts, new Map())
+
+    expect(ctx.tools.get('mcp__srv__lookup')?.isConcurrencySafe?.({})).toBe(true)
+    expect(ctx.tools.get('mcp__srv__idempotent_write')?.isConcurrencySafe).toBeUndefined()
+    expect(ctx.tools.get('mcp__srv__write')?.isConcurrencySafe).toBeUndefined()
   })
 
   it('lets two servers publish the same raw name side by side', async () => {
